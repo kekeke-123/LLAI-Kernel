@@ -136,6 +136,7 @@ public:
 
     bool valid() const { return h_ != nullptr; }
     explicit operator bool() const { return valid(); }
+
     spk_engine * handle() const { return h_; }
 
     std::string info_line() const {
@@ -185,14 +186,18 @@ private:
 // ----------------------------------------------------------------- session
 
 struct Params {
+    // Zero means "let the kernel pick". The sampler already knows that a
+    // 0.8B Qwen wants top_k 20 / top_p 0.8 / repeat 1.05, while a generic model
+    // wants 40 / 0.95 / 1.1; hard-coding one set here made every C++ host
+    // inherit the wrong defaults and loop on small models.
     int    max_tokens    = 256;
-    float  temperature   = 0.7f;
-    float  top_p         = 0.9f;
-    int    top_k         = 40;
-    float  min_p         = 0.05f;
-    float  repeat_penalty = 1.0f;
-    int    repeat_last_n = 64;
-    unsigned seed        = 0;   // 0 = random
+    float  temperature   = 0.0f;   // 0 = default 0.7, negative = greedy
+    float  top_p         = 0.0f;
+    int    top_k         = 0;
+    float  min_p         = 0.0f;
+    float  repeat_penalty = 0.0f;
+    int    repeat_last_n = 0;
+    unsigned seed        = 0;      // 0 = random
 };
 
 class Session {
@@ -213,6 +218,16 @@ public:
             spk_session_destroy(h_);
             h_ = nullptr;
         }
+    }
+
+    // Factory matching the documented usage: `auto s = Session::create(engine);`
+    // Returns nullptr when the engine has no free sequence slot.
+    static std::unique_ptr<Session> create(Engine & engine) {
+        std::unique_ptr<Session> s(new Session(engine));
+        if (!s->valid()) {
+            s.reset();
+        }
+        return s;
     }
 
     Session(const Session &) = delete;
@@ -265,15 +280,26 @@ public:
 
         struct sink {
             std::function<void(std::string_view, bool)> fn;
-        } s{std::move(on_piece)};
+            std::string text;
+        } s{std::move(on_piece), {}};
 
         auto thunk = [](const char * piece, bool is_final, void * ud) {
             auto * box = static_cast<sink *>(ud);
+            if (piece != nullptr && piece[0] != '\0') {
+                box->text.append(piece);
+            }
             if (box->fn) {
                 box->fn(std::string_view(piece != nullptr ? piece : ""), is_final);
             }
         };
-        return Status(spk_session_generate(h_, &gp, thunk, &s));
+        st = Status(spk_session_generate(h_, &gp, thunk, &s));
+        // The kernel keeps the token history, not the message history: without
+        // this, the next turn sees two user messages in a row and the model
+        // answers as if the previous reply never happened.
+        if (st.ok() && !s.text.empty() && h_ != nullptr) {
+            spk_session_append(h_, "assistant", s.text.c_str(), nullptr);
+        }
+        return st;
     }
 
     Reply ask(std::string_view user_text, const Params & p = Params()) {

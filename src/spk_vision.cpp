@@ -69,9 +69,9 @@ spk_status spk_vision_eval(spk_engine * eng, spk_session * ses,
         return SPK_ERR_INTERNAL;
     }
 
-    const int32_t nb = eng->cfg.n_batch > 0 ? eng->cfg.n_batch : 256;
+    const int32_t nb = spk_effective_batch(eng);
     const int32_t rc_eval = spk_vision_helper_eval(eng->vision.vision, eng->text.ctx, chunks,
-                                                 n_past, 0, nb, logits_last, new_n_past);
+                                                 n_past, ses->seq, nb, logits_last, new_n_past);
 
     spk_vision_chunks_free(chunks);
     for (spk_bitmap * b : bitmaps) {

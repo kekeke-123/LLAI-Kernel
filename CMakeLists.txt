@@ -100,6 +100,15 @@ if(SPK_BUILD_EXAMPLES)
     target_link_libraries(llai_chat PRIVATE spk)
 endif()
 
+# Kernel regression suite: sequence isolation, concurrent generation, greedy
+# determinism. Built on request so a release archive stays lean.
+option(SPK_BUILD_TESTS "Build the kernel regression tests" OFF)
+if(SPK_BUILD_TESTS)
+    add_executable(llai_selftest tests/llai_selftest.cpp)
+    target_compile_features(llai_selftest PRIVATE cxx_std_17)
+    target_link_libraries(llai_selftest PRIVATE spk)
+endif()
+
 include(GNUInstallDirs)
 install(TARGETS spk
     ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}

@@ -77,6 +77,8 @@ typedef mtmd_helper_init_opt         spk_vision_opt;
 #define spk_n_ctx                        llama_n_ctx
 #define spk_get_memory                   llama_get_memory
 #define spk_memory_clear                 llama_memory_clear
+#define spk_memory_seq_rm                llama_memory_seq_rm
+#define spk_n_seq_max                    llama_n_seq_max
 #define spk_get_logits_ith               llama_get_logits_ith
 
 // ------------------------------------------------------------- state

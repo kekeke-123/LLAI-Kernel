@@ -4,7 +4,7 @@
 
 **Portable, pure-C++ inference kernel for on-device LLMs.**
 
-`1.0.0` · MIT · C ABI · iOS · macOS · Windows · Linux · Android
+`1.1.0` · MIT · C ABI · iOS · macOS · Windows · Linux · Android
 
 </div>
 
@@ -133,7 +133,7 @@ embedded jinja template, falling back to ChatML.
 
 ## Status
 
-`1.0.0` — the decode path, prefix reuse, checkpointing and the Metal backend are validated on
+`1.1.0` — the decode path, prefix reuse, checkpointing and the Metal backend are validated on
 real weights. Translation / ASR paths are behind the same decode loop and are covered by the
 selftest, not by the iOS host yet.
 
