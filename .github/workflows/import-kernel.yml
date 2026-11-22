@@ -3,7 +3,7 @@ name: import-kernel
 # Bootstraps this repository from the reference implementation:
 # clones kekeke-123/siri-ai-on-old-iphone, extracts kernel/ (applying the
 # source patches for llai.hpp, the C++ example and the n_tokens fix), flattens
-# it to the repository root and adds the library install rules.
+# it to the repository root, rebrands to LLAI and adds library install rules.
 
 on:
   push:
@@ -53,9 +53,33 @@ jobs:
           sed -i 's|\${CMAKE_CURRENT_SOURCE_DIR}/../third_party/runtime|\${CMAKE_CURRENT_SOURCE_DIR}/third_party/runtime|g' CMakeLists.txt
           grep -n 'RUNTIME_DIR' CMakeLists.txt | head -3
 
+      - name: Rebrand and tidy
+        run: |
+          set -euo pipefail
+          rm -f src/spk_session_tail.part
+          rm -f patches/0004-e-example.patch patches/0004-l-llai-hpp.patch
+          rm -f patches/0004-t-ntokens.patch patches/0004-m-cmake-lib.patch
+          sed -i 's/Siri Plus/LLAI/g' src/spk_core.h
+          sed -i 's/You are Siri AI/You are LLAI/g' src/spk_session.cpp src/spk_vision.cpp
+          sed -i 's/siriplus-kernel/LLAI-Kernel/g' CMakeLists.txt
+          cat > .gitignore <<'EOF'
+          build/
+          build-*/
+          dist/
+          third_party/runtime/
+          *.gguf
+          *.o
+          *.a
+          *.log
+          EOF
+          grep -rn 'Siri' src include CMakeLists.txt || echo 'no Siri left'
+
       - name: Add library install rules
         run: |
-          cat >> CMakeLists.txt <<'EOF'
+          if grep -q 'SPK_BUILD_EXAMPLES' CMakeLists.txt; then
+            echo 'install rules already present'
+          else
+            cat >> CMakeLists.txt <<'EOF'
 
           # ---- LLAI 1.0 packaging -------------------------------------------
           option(SPK_BUILD_EXAMPLES "Build the LLAI C++ examples" OFF)
@@ -72,7 +96,8 @@ jobs:
               RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
           install(DIRECTORY include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
           EOF
-          tail -20 CMakeLists.txt
+          fi
+          tail -22 CMakeLists.txt
 
       - name: Commit
         run: |
