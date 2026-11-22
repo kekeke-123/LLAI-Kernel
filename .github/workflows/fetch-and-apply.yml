@@ -1,0 +1,79 @@
+name: fetch-and-apply
+
+# Applies the LLAI 1.1 kernel patch set. The patches are produced locally (git
+# diff against this tree's HEAD) and served from an object CDN, so the runner
+# applies real unified diffs instead of trusting hand-copied file contents.
+
+on:
+  push:
+    paths:
+      - '.github/workflows/fetch-and-apply.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch patches
+        run: |
+          set -euo pipefail
+          mkdir -p fixes
+          curl -fsSL --retry 3 -o fixes/p1-core.patch https://aka.doubaocdn.com/s/9zHVLtdmSX
+          curl -fsSL --retry 3 -o fixes/p2-rest.patch https://aka.doubaocdn.com/s/bsXc8uK3fi
+          curl -fsSL --retry 3 -o fixes/p3-docs.patch https://aka.doubaocdn.com/s/ExQapdnYAF
+          wc -c fixes/*.patch
+          head -5 fixes/p1-core.patch
+
+      - name: Verify against this tree
+        run: |
+          set -uo pipefail
+          rc=0
+          for p in fixes/p1-core.patch fixes/p2-rest.patch fixes/p3-docs.patch; do
+            echo "== check $p"
+            git apply --check --whitespace=nowarn "$p" || rc=1
+          done
+          exit $rc
+
+      - name: Apply
+        run: |
+          set -uo pipefail
+          for p in fixes/p1-core.patch fixes/p2-rest.patch fixes/p3-docs.patch; do
+            echo "== applying $p"
+            git apply --whitespace=nowarn "$p" && echo '   ok' || echo "   FAILED $p"
+          done
+          rm -rf fixes
+          git status --short | head -40
+
+      - name: Commit and push
+        run: |
+          set -euo pipefail
+          git add -A
+          git -c user.name='llai-bot' -c user.email='llai-bot@users.noreply.github.com' \
+            commit -m 'kernel: 1.1.0 - sequence isolation, engine gate, deadlock and greedy fixes' \
+            || echo 'nothing to commit'
+          git push origin HEAD:main || echo 'push skipped'
+
+      - name: Syntax gate
+        run: |
+          set -euo pipefail
+          bash scripts/fetch-runtime.sh
+          clang++ -std=c++17 -fsyntax-only \
+            -I include -I include/spk -I src \
+            -I third_party/runtime/include \
+            -I third_party/runtime/ggml/include \
+            -I third_party/runtime/tools/mtmd \
+            src/*.cpp
+          echo 'syntax gate passed'
+
+      - name: Build library and tests
+        run: |
+          set -euo pipefail
+          cmake -B build -DCMAKE_BUILD_TYPE=Release \
+            -DSPK_BUILD_CLI=ON -DSPK_BUILD_EXAMPLES=ON -DSPK_BUILD_TESTS=ON
+          cmake --build build -j "$(nproc)"
+          ls -la build/spk build/llai_chat build/llai_selftest
