@@ -1,0 +1,84 @@
+name: import-kernel
+
+# Bootstraps this repository from the reference implementation:
+# clones kekeke-123/siri-ai-on-old-iphone, extracts kernel/ (applying the
+# source patches for llai.hpp, the C++ example and the n_tokens fix), flattens
+# it to the repository root and adds the library install rules.
+
+on:
+  push:
+    paths:
+      - '.github/workflows/import-kernel.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Pull LLAI kernel sources
+        run: |
+          set -euo pipefail
+          git clone --depth 1 https://github.com/kekeke-123/siri-ai-on-old-iphone /tmp/src
+          cd /tmp/src
+          mkdir -p kernel/include/llai kernel/examples
+          for p in patches/0004-e-example.patch patches/0004-l-llai-hpp.patch patches/0004-t-ntokens.patch; do
+            if [ -f "$p" ]; then
+              git apply --whitespace=nowarn "$p" || echo "skip $p"
+            fi
+          done
+          ls -la kernel/include/llai kernel/examples || true
+
+          cd "$GITHUB_WORKSPACE"
+          rm -rf include src tools examples docs scripts patches CMakeLists.txt
+          cp -R /tmp/src/kernel/include include
+          cp -R /tmp/src/kernel/src src
+          cp -R /tmp/src/kernel/tools tools
+          if [ -d /tmp/src/kernel/examples ]; then cp -R /tmp/src/kernel/examples examples; fi
+          cp /tmp/src/kernel/CMakeLists.txt CMakeLists.txt
+          if [ -d /tmp/src/scripts ]; then cp -R /tmp/src/scripts scripts; fi
+          if [ -d /tmp/src/docs ]; then cp -R /tmp/src/docs docs; fi
+          if [ -d /tmp/src/patches ]; then cp -R /tmp/src/patches patches; fi
+          if [ -f /tmp/src/LICENSE ]; then cp /tmp/src/LICENSE LICENSE; fi
+          if [ -f /tmp/src/third_party/NOTICE.md ]; then
+            mkdir -p third_party
+            cp /tmp/src/third_party/NOTICE.md third_party/
+          fi
+
+          # the reference tree lives in kernel/, so the runtime path loses one level
+          sed -i 's|\${CMAKE_CURRENT_SOURCE_DIR}/../third_party/runtime|\${CMAKE_CURRENT_SOURCE_DIR}/third_party/runtime|g' CMakeLists.txt
+          grep -n 'RUNTIME_DIR' CMakeLists.txt | head -3
+
+      - name: Add library install rules
+        run: |
+          cat >> CMakeLists.txt <<'EOF'
+
+          # ---- LLAI 1.0 packaging -------------------------------------------
+          option(SPK_BUILD_EXAMPLES "Build the LLAI C++ examples" OFF)
+          if(SPK_BUILD_EXAMPLES)
+              add_executable(llai_chat examples/llai_chat.cpp)
+              target_compile_features(llai_chat PRIVATE cxx_std_17)
+              target_link_libraries(llai_chat PRIVATE spk)
+          endif()
+
+          include(GNUInstallDirs)
+          install(TARGETS spk
+              ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+              LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+              RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+          install(DIRECTORY include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+          EOF
+          tail -20 CMakeLists.txt
+
+      - name: Commit
+        run: |
+          set -euo pipefail
+          git add -A
+          git status --short | head -60
+          git -c user.name='llai-bot' -c user.email='llai-bot@users.noreply.github.com' \
+            commit -m 'kernel: import LLAI Kernel 1.0.0 sources' || echo 'nothing to commit'
+          git push origin HEAD:main || echo 'push skipped'
