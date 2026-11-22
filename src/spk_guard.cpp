@@ -16,6 +16,9 @@
 
 #if defined(__APPLE__)
 #include <mach/mach.h>
+#elif defined(_WIN32)
+#include <windows.h>
+#include <psapi.h>
 #else
 #include <unistd.h>
 #endif
@@ -228,6 +231,12 @@ double spk_rss_mb() {
         return 0.0;
     }
     return (double) info.resident_size / (1024.0 * 1024.0);
+#elif defined(_WIN32)
+    PROCESS_MEMORY_COUNTERS pmc;
+    if (!GetProcessMemoryInfo(GetCurrentProcess(), &pmc, sizeof(pmc))) {
+        return 0.0;
+    }
+    return (double) pmc.WorkingSetSize / (1024.0 * 1024.0);
 #else
     FILE * f = fopen("/proc/self/statm", "r");
     if (f == nullptr) {

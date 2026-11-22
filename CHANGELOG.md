@@ -6,6 +6,23 @@ Kernel hardening. **No API change** — every fix below is internal, so 1.0 host
 and 1.0 IPAs keep working against the 1.1 library. The C ABI, the `spk_*` prefix
 and the header layout are untouched.
 
+### Windows x64
+
+**`spk_rss_mb()` did not compile on Windows.** It read `/proc/self/statm` and
+`sysconf(_SC_PAGESIZE)`, both POSIX-only. The whole kernel therefore built on
+Linux and macOS but never on Windows, which made the "portable kernel" claim
+untrue for the largest desktop platform. It now selects `GetProcessMemoryInfo`
+on `_WIN32` and keeps the `/proc` path for everything else.
+
+**`SPK_VERSION_MINOR` disagreed with `SPK_VERSION_STRING`.** The header advertised
+`1.4.0` while the string said `1.1.0`, so any host that wrote its own version
+comparison from the numeric macros misjudged compatibility. Numeric macros and
+the string now move together.
+
+A native `LLAI.exe`, `LLAI.dll`, `libLLAI.dll.a`, `libllai.a` and
+`libllai_full.a` for Windows 7+ are shipped from this tree; the build recipe and
+the three MinGW gotchas are written down in `docs/WINDOWS.md`.
+
 ### Fatal
 
 **1. `spk_set_error()` deadlocked the engine on any load failure.**
