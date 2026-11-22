@@ -1,0 +1,64 @@
+name: apply-patch
+
+# The maintenance agent can only write plain files through its GitHub
+# connector, so multi-file source changes land as unified diffs here and are
+# applied by a real runner. A patch that does not apply is parked in
+# fixes/failed/ instead of being deleted, so nothing is silently lost.
+
+on:
+  push:
+    paths:
+      - 'fixes/**'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Apply patches
+        id: apply
+        run: |
+          set -uo pipefail
+          shopt -s nullglob
+          applied=0
+          failed=""
+          for p in fixes/*.patch; do
+            echo "== applying $p"
+            if git apply --whitespace=nowarn "$p"; then
+              echo "   ok"
+              rm -f "$p"
+              applied=$((applied+1))
+            else
+              echo "   FAILED, parked in fixes/failed/"
+              mkdir -p fixes/failed
+              mv "$p" fixes/failed/
+              failed="$failed $(basename $p)"
+            fi
+          done
+          echo "applied=$applied failed=[$failed]"
+          echo "failed=$failed" >> "$GITHUB_OUTPUT"
+
+      - name: Commit
+        run: |
+          git add -A
+          git status --short | head -40
+          git -c user.name='llai-bot' -c user.email='llai-bot@users.noreply.github.com' \
+            commit -m "kernel: apply pending fixes to LLAI 1.1" || echo 'nothing to commit'
+          git push origin HEAD:main || echo 'push skipped'
+
+      - name: Syntax gate
+        run: |
+          set -euo pipefail
+          bash scripts/fetch-runtime.sh
+          clang++ -std=c++17 -fsyntax-only \
+            -I include -I include/spk -I src \
+            -I third_party/runtime/include \
+            -I third_party/runtime/ggml/include \
+            -I third_party/runtime/tools/mtmd \
+            src/*.cpp
+            echo 'syntax gate passed'
