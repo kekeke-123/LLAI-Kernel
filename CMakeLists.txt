@@ -61,7 +61,10 @@ if(NOT MSVC)
     target_compile_options(spk PRIVATE -fvisibility=hidden -fno-exceptions)
 endif()
 
-target_link_libraries(spk PUBLIC llama mtmd)
+# The runtime is an implementation detail. PRIVATE keeps its headers out of
+# every downstream compile command: hosts see include/ and include/spk only.
+# src/spk_core.h is the single bridge between this kernel and the runtime.
+target_link_libraries(spk PRIVATE llama mtmd)
 
 # The public ABI is C, so the static library carries no C++ symbols.
 if(NOT MSVC)
@@ -103,3 +106,5 @@ install(TARGETS spk
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 install(DIRECTORY include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+install(FILES docs/ABOUT.md docs/PORTING.md docs/WINDOWS.md
+    DESTINATION ${CMAKE_INSTALL_DOCDIR})
