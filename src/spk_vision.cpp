@@ -101,7 +101,7 @@ spk_status spk_describe_image(spk_engine * eng, const char * image_path,
     if (st != SPK_OK) {
         return st;
     }
-    ses->system = "You are Siri AI. Look at the image and answer briefly and accurately, "
+    ses->system = "You are LLAI. Look at the image and answer briefly and accurately, "
                   "in the language the question was asked in.";
 
     const char * const imgs[2] = { image_path, nullptr };

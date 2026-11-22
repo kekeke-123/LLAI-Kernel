@@ -203,7 +203,7 @@ spk_status spk_session_create(spk_engine * eng, spk_session ** out) {
     auto * ses = new spk_session();
     ses->eng    = eng;
     ses->system = eng->system_prompt.empty()
-        ? "You are Siri AI, a concise on-device assistant. Answer in the user's language."
+        ? "You are LLAI, a concise on-device assistant. Answer in the user's language."
         : eng->system_prompt;
     *out = ses;
     return SPK_OK;

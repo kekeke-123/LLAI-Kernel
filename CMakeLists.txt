@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(siriplus-kernel LANGUAGES C CXX)
+project(LLAI-Kernel LANGUAGES C CXX)
 
 # The upstream runtime is fetched at build time (scripts/fetch-runtime.sh) and
 # patched in place. It is not vendored, so this tree stays small and the

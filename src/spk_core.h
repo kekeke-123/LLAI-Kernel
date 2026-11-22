@@ -2,7 +2,7 @@
  * spk_core.h - the ONLY translation unit of this kernel that is allowed to
  * mention the upstream runtime's identifiers.
  *
- * Everything else in kernel/src speaks spk_* only. This keeps the Siri Plus
+ * Everything else in kernel/src speaks spk_* only. This keeps the LLAI
  * Kernel brand-clean at the source level while still honouring the MIT
  * attribution of the runtime it is built on (see third_party/NOTICE.md).
  *

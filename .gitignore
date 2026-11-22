@@ -1,0 +1,8 @@
+build/
+build-*/
+dist/
+third_party/runtime/
+*.gguf
+*.o
+*.a
+*.log
