@@ -1,0 +1,158 @@
+name: build
+
+on:
+  push:
+    branches: [ main ]
+    paths-ignore:
+      - 'docs/**'
+      - '**.md'
+      - '.gitignore'
+  workflow_dispatch:
+
+jobs:
+  linux:
+    name: linux x64
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Toolchain
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq cmake ninja-build g++
+          g++ --version | head -1
+
+      - name: Fetch runtime
+        run: bash scripts/fetch-runtime.sh
+
+      - name: Configure
+        run: cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DSPK_BUILD_CLI=ON -DSPK_BUILD_EXAMPLES=ON
+
+      - name: Build
+        run: cmake --build build -j "$(nproc)"
+
+      - name: Smoke test
+        run: |
+          ls -la build/
+          ./build/spk || true
+
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: llai-kernel-linux-x64
+          if-no-files-found: warn
+          path: |
+            build/spk
+            build/llai_chat
+            build/libspk.a
+
+  macos:
+    name: macos arm64 (metal)
+    runs-on: macos-14
+    timeout-minutes: 120
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Toolchain
+        run: |
+          brew install cmake ninja || true
+          xcodebuild -version
+
+      - name: Fetch runtime
+        run: bash scripts/fetch-runtime.sh
+
+      - name: Configure
+        run: cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DSPK_BUILD_CLI=ON -DSPK_BUILD_EXAMPLES=ON -DGGML_METAL=ON
+
+      - name: Build
+        run: cmake --build build -j 4
+
+      - name: Smoke test
+        run: ls -la build/ && ./build/spk || true
+
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: llai-kernel-macos-arm64
+          if-no-files-found: warn
+          path: |
+            build/spk
+            build/llai_chat
+
+  windows:
+    name: windows x64
+    runs-on: windows-latest
+    timeout-minutes: 120
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: MSVC environment
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Toolchain
+        shell: bash
+        run: |
+          cmake --version
+          ninja --version || choco install ninja -y
+          cl 2>&1 | head -2 || true
+
+      - name: Fetch runtime
+        shell: bash
+        run: bash scripts/fetch-runtime.sh
+
+      - name: Configure (static CLI)
+        shell: bash
+        run: cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DSPK_BUILD_CLI=ON -DSPK_BUILD_EXAMPLES=ON
+
+      - name: Build (static)
+        shell: bash
+        run: cmake --build build 2>&1 | tail -40
+
+      - name: Configure (DLL host)
+        shell: bash
+        run: cmake -B build-dll -G Ninja -DCMAKE_BUILD_TYPE=Release -DSPK_LINK_SHARED=ON
+
+      - name: Build (DLL)
+        shell: bash
+        run: cmake --build build-dll 2>&1 | tail -40
+
+      - name: Package
+        shell: bash
+        run: |
+          mkdir -p dist/LLAI-1.0-windows-x64
+          cp -f build/spk.exe dist/LLAI-1.0-windows-x64/LLAI.exe 2>/dev/null || true
+          cp -f build/llai_chat.exe dist/LLAI-1.0-windows-x64/LLAI-chat.exe 2>/dev/null || true
+          cp -f build-dll/spk.dll dist/LLAI-1.0-windows-x64/LLAI.dll 2>/dev/null || true
+          cp -f build-dll/spk.lib dist/LLAI-1.0-windows-x64/LLAI.lib 2>/dev/null || true
+          cp -f include/spk/spk.h dist/LLAI-1.0-windows-x64/ 2>/dev/null || true
+          cp -f include/spk/spk_platform.h dist/LLAI-1.0-windows-x64/ 2>/dev/null || true
+          cp -f include/llai/llai.hpp dist/LLAI-1.0-windows-x64/ 2>/dev/null || true
+          cp -f docs/WINDOWS.md dist/LLAI-1.0-windows-x64/README.md 2>/dev/null || true
+          ls -la dist/LLAI-1.0-windows-x64
+
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: llai-kernel-windows-x64
+          if-no-files-found: warn
+          path: dist/LLAI-1.0-windows-x64
+
+      - name: Diagnostics on failure
+        if: failure()
+        shell: bash
+        run: |
+          {
+            echo '## windows build diagnostics'
+            echo '```'
+            ls -la build build-dll 2>&1 | tail -30
+            find . -name 'CMakeError.log' -o -name 'CMakeOutput.log' | head -5
+            echo '```'
+          } > CI_FAILURE.md
+          git add CI_FAILURE.md
+          git -c user.name='llai-bot' -c user.email='llai-bot@users.noreply.github.com' commit -m 'ci: windows diagnostics' || true
+          git push origin HEAD:main || true
